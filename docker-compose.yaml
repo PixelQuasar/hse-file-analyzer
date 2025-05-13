@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  postgres-filestorage:
+    image: postgres:15
+    container_name: postgres_filestorage_db
+    environment:
+      POSTGRES_USER: filestorage_user
+      POSTGRES_PASSWORD: filestorage_password
+      POSTGRES_DB: filestorage_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data_filestorage:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U filestorage_user -d filestorage_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-fileanalyzer:
+    image: postgres:15
+    container_name: postgres_fileanalyzer_db
+    environment:
+      POSTGRES_USER: fileanalyzer_user
+      POSTGRES_PASSWORD: fileanalyzer_password
+      POSTGRES_DB: fileanalyzer_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_data_fileanalyzer:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fileanalyzer_user -d fileanalyzer_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway-service:
+    build:
+      context: ./gateway
+      args:
+        JAR_FILE: target/gateway-service.jar
+    container_name: gateway_service
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      FILE_STORAGE_SERVICE_URL: http://file-storage-service:8081
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  file-storage-service:
+    build:
+      context: ./file-storage
+      args:
+        JAR_FILE: target/file-storage-service.jar
+    container_name: file_storage_service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-filestorage:5432/filestorage_db
+      SPRING_DATASOURCE_USERNAME: filestorage_user
+      SPRING_DATASOURCE_PASSWORD: filestorage_password
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres-filestorage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  file-analyzer-service:
+    build:
+      context: ./file-analyzer
+      args:
+        JAR_FILE: target/file-analyzer-service.jar
+    container_name: file_analyzer_service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-fileanalyzer:5432/fileanalyzer_db
+      SPRING_DATASOURCE_USERNAME: fileanalyzer_user
+      SPRING_DATASOURCE_PASSWORD: fileanalyzer_password
+      FILE_STORAGE_SERVICE_URL: http://file-storage-service:8081
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres-fileanalyzer:
+        condition: service_healthy
+      file-storage-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  pg_data_filestorage: {}
+  pg_data_fileanalyzer: {}
