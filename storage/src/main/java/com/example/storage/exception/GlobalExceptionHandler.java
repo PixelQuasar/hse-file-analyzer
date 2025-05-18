@@ -61,30 +61,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<Object> handleMaxSizeException(
-            MaxUploadSizeExceededException ex, WebRequest request) {
-
-        ErrorDetails body = new ErrorDetails(
-                LocalDateTime.now(),
-                HttpStatus.PAYLOAD_TOO_LARGE.value(),
-                "Payload Too Large",
-                "File size exceeds the configured limit!",
-                request.getDescription(false).replace("uri=", "")
-        );
-        return new ResponseEntity<>(body, HttpStatus.PAYLOAD_TOO_LARGE);
-    }
-
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleGenericException(
             Exception ex, WebRequest request) {
-        logger.error("An unexpected error occurred: ", ex); // Логируем полное исключение
+        logger.error("An unexpected error occurred: ", ex);
 
         ErrorDetails body = new ErrorDetails(
                 LocalDateTime.now(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "Internal Server Error",
-                "An unexpected error occurred. Please try again later.", // Общее сообщение для клиента
+                "An unexpected error occurred. Please try again later.",
                 request.getDescription(false).replace("uri=", "")
         );
         return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);

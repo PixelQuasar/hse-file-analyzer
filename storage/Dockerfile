@@ -11,7 +11,7 @@ WORKDIR /app
 COPY ${JAR_FILE} app.jar
 
 # Порт приложения внутри контейнера
-EXPOSE 8082
+EXPOSE 8081
 
 # Запуск приложения
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

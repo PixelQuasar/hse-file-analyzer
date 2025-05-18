@@ -68,9 +68,9 @@ services:
 
   gateway-service:
     build:
-      context: ./gateway-service
+      context: ./gateway
       args:
-        JAR_FILE: target/gateway-service-0.0.1-SNAPSHOT.jar
+        JAR_FILE: target/gateway-0.0.1-SNAPSHOT.jar
     container_name: gateway_service
     ports:
       - "8080:8080"
@@ -79,9 +79,9 @@ services:
       APP_SERVICES_FILE-STORAGE_URL: http://file-storage-service:8081
     depends_on:
       file-storage-service:
-        condition: service_healthy
+        condition: service_started
       file-analyzer-service:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -91,12 +91,12 @@ services:
 
   file-storage-service:
     build:
-      context: ./file-storage-service
+      context: ./storage
       args:
-        JAR_FILE: target/file-storage-service-0.0.1-SNAPSHOT.jar
+        JAR_FILE: target/storage-0.0.1-SNAPSHOT.jar
     container_name: file_storage_service
     ports:
-      - "8081:8081"
+      - "8081:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_KAFKA_BOOTSTRAP-SERVERS: kafka:9092
@@ -112,21 +112,15 @@ services:
         condition: service_healthy
       postgres-filestorage:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   file-analyzer-service:
     build:
-      context: ./file-analyzer-service
+      context: ./analyzer
       args:
-        JAR_FILE: target/file-analyzer-service-0.0.1-SNAPSHOT.jar
+        JAR_FILE: target/analyzer-0.0.1-SNAPSHOT.jar
     container_name: file_analyzer_service
     ports:
-      - "8082:8082"
+      - "8082:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_KAFKA_BOOTSTRAP-SERVERS: kafka:9092
@@ -144,13 +138,7 @@ services:
       postgres-fileanalyzer:
         condition: service_healthy
       file-storage-service:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+        condition: service_started
 
 volumes:
   pg_data_filestorage: {}
