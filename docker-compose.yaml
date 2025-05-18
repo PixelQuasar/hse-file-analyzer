@@ -68,40 +68,45 @@ services:
 
   gateway-service:
     build:
-      context: ./gateway
+      context: ./gateway-service
       args:
-        JAR_FILE: target/gateway-service.jar
+        JAR_FILE: target/gateway-service-0.0.1-SNAPSHOT.jar
     container_name: gateway_service
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      FILE_STORAGE_SERVICE_URL: http://file-storage-service:8081
+      APP_SERVICES_FILE-STORAGE_URL: http://file-storage-service:8081
     depends_on:
-      kafka:
+      file-storage-service:
+        condition: service_healthy
+      file-analyzer-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 45s
 
   file-storage-service:
     build:
-      context: ./file-storage
+      context: ./file-storage-service
       args:
-        JAR_FILE: target/file-storage-service.jar
+        JAR_FILE: target/file-storage-service-0.0.1-SNAPSHOT.jar
     container_name: file_storage_service
     ports:
       - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_BOOTSTRAP-SERVERS: kafka:9092
+      KAFKA_TOPIC_FILES_UPLOADED: files.uploaded
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-filestorage:5432/filestorage_db
       SPRING_DATASOURCE_USERNAME: filestorage_user
       SPRING_DATASOURCE_PASSWORD: filestorage_password
+      FILE_UPLOAD-DIR: /app/uploads
+    volumes:
+      - file_storage_uploads_volume:/app/uploads
     depends_on:
       kafka:
         condition: service_healthy
@@ -116,19 +121,23 @@ services:
 
   file-analyzer-service:
     build:
-      context: ./file-analyzer
+      context: ./file-analyzer-service
       args:
-        JAR_FILE: target/file-analyzer-service.jar
+        JAR_FILE: target/file-analyzer-service-0.0.1-SNAPSHOT.jar
     container_name: file_analyzer_service
     ports:
       - "8082:8082"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_BOOTSTRAP-SERVERS: kafka:9092
+      SPRING_KAFKA_CONSUMER_GROUP-ID: file-analyzer-group
+      KAFKA_TOPIC_FILES_UPLOADED: files.uploaded
+      KAFKA_TOPIC_STATS_CALCULATED: files.stats.calculated
+      KAFKA_TOPIC_PLAGIARISM_CHECKED: files.plagiarism.checked
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-fileanalyzer:5432/fileanalyzer_db
       SPRING_DATASOURCE_USERNAME: fileanalyzer_user
       SPRING_DATASOURCE_PASSWORD: fileanalyzer_password
-      FILE_STORAGE_SERVICE_URL: http://file-storage-service:8081
+      APP_SERVICES_FILE-STORAGE_BASE-URL: http://file-storage-service:8081/api/v1
     depends_on:
       kafka:
         condition: service_healthy
@@ -141,8 +150,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
 
 volumes:
   pg_data_filestorage: {}
   pg_data_fileanalyzer: {}
+  file_storage_uploads_volume: {}
